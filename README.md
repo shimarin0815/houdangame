@@ -2,8 +2,6 @@
 
 > 単一 HTML だけで動く、モダン＆美しい迎撃アクション。角度とパワーを調整して、基地を守ろう。
 
-![screenshot placeholder](./screenshot.png)
-
 <p align="center">
   <img alt="Single file" src="https://img.shields.io/badge/single--file-HTML-informational?style=flat" />
   <img alt="No dependencies" src="https://img.shields.io/badge/no%20deps-vanilla%20JS-success?style=flat" />
