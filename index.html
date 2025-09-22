@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>砲弾で敵を迎撃するゲーム</title>
+  <meta name="description" content="角度とパワーで砲弾を撃ち、基地を守ろう。単一HTMLのシンプルな迎撃ゲーム。" />
+  <style>
+    /* =====================
+       Modern Look & Feel
+       ===================== */
+    :root{
+      --bg-1:#0f1020;         /* deep indigo */
+      --bg-2:#151a33;         /* night blue */
+      --grad-1:#6a8dff;       /* periwinkle */
+      --grad-2:#a26bff;       /* purple */
+      --grad-3:#58f2d1;       /* mint */
+      --glass:rgba(255,255,255,0.08);
+      --glass-strong:rgba(255,255,255,0.16);
+      --text:#e8ecff;
+      --muted:#aeb6d9;
+      --accent:#58f2d1;
+      --danger:#ff6b7a;
+      --warn:#ffd166;
+      --ok:#7dff8b;
+      --shadow:0 10px 30px rgba(0,0,0,.4);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%; background: radial-gradient(1200px 800px at 20% -10%, rgba(162,107,255,.35), transparent 60%),
+                                 radial-gradient(900px 600px at 100% 0%, rgba(88,242,209,.25), transparent 60%),
+                                 linear-gradient(180deg,var(--bg-1),var(--bg-2));
+               color:var(--text); margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Inter, "Noto Sans JP", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";}
+    .wrap{position:relative; min-height:100%; display:grid; place-items:center; padding:16px}
+    .frame{width:min(1100px, 100%); aspect-ratio: 16/9; position:relative; border-radius: var(--radius);
+           background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+           box-shadow: var(--shadow); overflow:hidden;}
+    canvas{width:100%; height:100%; display:block;}
+
+    /* Top HUD */
+    .hud{position:absolute; inset:0; pointer-events:none;}
+    .topbar{position:absolute; inset-inline:16px; top:16px; display:flex; gap:12px; align-items:center; justify-content:space-between;}
+    .glass{backdrop-filter: blur(10px); background:var(--glass); border:1px solid rgba(255,255,255,.12); border-radius: calc(var(--radius) - 6px);
+           padding:10px 14px; box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    .brand{display:flex; gap:10px; align-items:center; pointer-events:auto}
+    .brand .dot{width:12px; height:12px; border-radius:50%; background:conic-gradient(from 0deg, var(--grad-1), var(--grad-2), var(--grad-3)); box-shadow:0 0 12px var(--grad-2)}
+    .brand .title{font-weight:800; letter-spacing:.02em}
+
+    .stats{display:flex; gap:10px; align-items:center}
+    .chip{display:flex; align-items:center; gap:8px; font-weight:700;}
+    .chip .val{font-variant-numeric: tabular-nums; font-weight:800}
+    .hearts{display:flex; gap:6px}
+    .heart{width:14px; height:14px; clip-path:path('M12 4C12 1.8 10.2 0 8 0 6.6 0 5.4.6 4.6 1.6 3.8.6 2.6 0 1.2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2.2 1.8 4 4 4 5.4 4 6.6 3.2 7.4 2.2 8.2 3.2 9.4 4 10.8 4 13 4 14.8 2.2 14.8 0 14.8 0 14.8 0 14.8 0 13.4 0 12.2.6 11.4 1.6 10.6.6 9.4 0 8 0 5.8 0 4 1.8 4 4 4'); background:linear-gradient(180deg,#ff9aa7,#ff6b7a); box-shadow:0 2px 8px rgba(255,107,122,.5)}
+
+    /* Right panel: help */
+    .side{position:absolute; right:16px; bottom:16px; display:flex; flex-direction:column; gap:10px; align-items:flex-end}
+    .help{max-width:320px; font-size:14px; line-height:1.5}
+    .help kbd{font:600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; background:rgba(255,255,255,.12); padding:4px 6px; border-radius:8px}
+
+    /* Bottom: power bar */
+    .power{position:absolute; left:16px; bottom:16px; width:min(380px, 55%); height:14px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); overflow:hidden}
+    .power .fill{height:100%; width:0%; background: linear-gradient(90deg, var(--grad-1), var(--grad-2), var(--grad-3)); box-shadow: inset 0 0 12px rgba(255,255,255,.2)}
+
+    /* Center overlay buttons */
+    .center{position:absolute; inset:0; display:grid; place-items:center;}
+    .stack{display:flex; flex-direction:column; gap:14px; align-items:center}
+    .btn{pointer-events:auto; appearance:none; border:none; outline:none; cursor:pointer; padding:14px 18px; border-radius:14px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:#0d1025;
+         background:linear-gradient(180deg,#ffffff,#e9f0ff); box-shadow:0 10px 24px rgba(0,0,0,.35), 0 1px 0 #fff inset; transition: transform .1s ease, box-shadow .2s ease}
+    .btn:hover{transform:translateY(-1px); box-shadow:0 14px 28px rgba(0,0,0,.4), 0 1px 0 #fff inset}
+    .btn:active{transform:translateY(1px)}
+
+    .tag{font-size:12px; letter-spacing:.06em; color:var(--muted)}
+
+    /* Accessibility */
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
+
+    /* Responsive tweaks */
+    @media (max-width: 720px){
+      .help{max-width: 82vw}
+      .topbar{inset-inline:10px; top:10px}
+      .side{right:10px; bottom:10px}
+      .power{left:10px; bottom:10px; height:12px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="frame" id="game-frame" aria-label="砲弾で敵を迎撃するゲーム">
+      <canvas id="game"></canvas>
+
+      <!-- HUD -->
+      <div class="hud" aria-hidden="true">
+        <div class="topbar">
+          <div class="brand glass">
+            <div class="dot"></div>
+            <div class="title">砲弾で敵を迎撃するゲーム</div>
+          </div>
+          <div class="stats">
+            <div class="chip glass"><span>Lv</span><span class="val" id="lv">1</span></div>
+            <div class="chip glass"><span>Score</span><span class="val" id="score">0</span></div>
+            <div class="chip glass"><span>Combo</span><span class="val" id="combo">x1</span></div>
+            <div class="chip glass"><span>HP</span>
+              <div class="hearts" id="hearts" aria-label="残りライフ"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="side">
+          <div class="help glass">
+            <div style="font-weight:700; margin-bottom:6px">操作方法</div>
+            <div>マウス（または指）を砲台の方向に動かし、<kbd>長押し</kbd>でパワーを溜めて、<kbd>離す</kbd>と発射。</div>
+            <div style="opacity:.9; margin-top:6px"><kbd>P</kbd> 一時停止／再開・ <kbd>R</kbd> リスタート</div>
+          </div>
+        </div>
+
+        <div class="power glass" aria-label="パワーゲージ"><div class="fill" id="power-fill"></div></div>
+
+        <div class="center" id="overlay">
+          <div class="stack">
+            <button class="btn" id="start-btn">ゲーム開始</button>
+            <div class="tag">角度とパワーで迎撃せよ — 基地を守りきれるか？</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  ;(()=>{
+    const canvas = document.getElementById('game');
+    const frame = document.getElementById('game-frame');
+    const ctx = canvas.getContext('2d');
+
+    // HUD elements
+    const elScore = document.getElementById('score');
+    const elLv = document.getElementById('lv');
+    const elCombo = document.getElementById('combo');
+    const elHearts = document.getElementById('hearts');
+    const elPowerFill = document.getElementById('power-fill');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('start-btn');
+
+    // Device pixel ratio for crisp drawing
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+    // World constants
+    const WORLD = {
+      gravity: 1600,           // px/s^2
+      groundH: 84,             // ground height (px)
+      turretX: 90,             // turret base position
+      turretY: null,           // computed from height
+      maxPower: 1050,          // initial projectile speed px/s
+      chargeSpeed: 700,        // how fast power fills px/s
+      enemyBaseHP: 3,
+    };
+
+    // Game state
+    let W=0, H=0, last=0, running=false, paused=false;
+
+    const state = {
+      score:0,
+      level:1,
+      combo:1,
+      comboTimer:0,
+      hp:WORLD.enemyBaseHP,
+      shells:[],
+      enemies:[],
+      particles:[],
+      spawnTimer:0,
+      spawnInterval:1.6,
+      pointer:{x:300,y:300,down:false,charging:false,power:0},
+    };
+
+    function resize(){
+      const rect = frame.getBoundingClientRect();
+      W = Math.floor(rect.width * DPR);
+      H = Math.floor(rect.height * DPR);
+      canvas.width = W; canvas.height = H;
+      WORLD.turretY = H - WORLD.groundH * DPR;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Utility
+    const rand = (a,b)=>Math.random()*(b-a)+a;
+    const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+    // Simple audio with WebAudio API (tiny beeps)
+    const audioCtx = (window.AudioContext? new AudioContext(): null);
+    const playBeep = (f=440, t=0.07, type='triangle', g=.05)=>{
+      if(!audioCtx || paused) return;
+      const o = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      o.type=type; o.frequency.value=f;
+      gain.gain.setValueAtTime(g, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + t);
+      o.connect(gain).connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime+t);
+    };
+
+    // Entities
+    class Shell{ constructor(x,y,vx,vy){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.r=7*DPR;this.alive=true; this.trail=[];}
+      step(dt){
+        // store trail
+        this.trail.push({x:this.x,y:this.y,alpha:1}); if(this.trail.length>10) this.trail.shift();
+        this.vy += WORLD.gravity*DPR*dt; this.x += this.vx*dt; this.y += this.vy*dt;
+        if(this.y>H - WORLD.groundH*DPR - this.r){ // bounce small? just remove
+          this.explode();
+        }
+        if(this.x>W+200*DPR || this.x<-200*DPR || this.y<-200*DPR) this.alive=false;
+      }
+      explode(){
+        this.alive=false; makeExplosion(this.x,this.y, 18, '#aee8ff'); playBeep(160,0.05,'sawtooth',.03);
+      }
+      draw(){
+        // trail
+        for(let i=0;i<this.trail.length;i++){
+          const t=this.trail[i]; t.alpha*=0.88; ctx.globalAlpha=t.alpha*0.6; ctx.beginPath(); ctx.arc(t.x,t.y,this.r*0.7,0,Math.PI*2); ctx.fillStyle='#bfe9ff'; ctx.fill();
+        }
+        ctx.globalAlpha=1; ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+        const grd=ctx.createRadialGradient(this.x-2,this.y-3,2,this.x,this.y,this.r);
+        grd.addColorStop(0,'#e8f9ff'); grd.addColorStop(1,'#6aa9ff');
+        ctx.fillStyle=grd; ctx.fill();
+        ctx.beginPath(); ctx.arc(this.x-2,this.y-3,this.r*0.4,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.6)'; ctx.fill();
+      }
+    }
+
+    class Enemy{ constructor(y,speed, hp=1, r=16*DPR){
+        this.x=W + 40*DPR; this.y=y; this.r=r; this.speed=speed; this.alive=true; this.hp=hp; this.color='#ffd166';
+      }
+      step(dt){ this.x -= this.speed*dt; if(this.x < 50*DPR){ this.alive=false; baseHit(); } }
+      draw(){
+        ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+        const g=ctx.createRadialGradient(this.x-4,this.y-6,2,this.x,this.y,this.r);
+        g.addColorStop(0,'#fff3d0'); g.addColorStop(1,this.color); ctx.fillStyle=g; ctx.fill();
+        // small eye
+        ctx.beginPath(); ctx.arc(this.x+this.r*0.25,this.y-this.r*0.25,this.r*0.15,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,.4)'; ctx.fill();
+      }
+    }
+
+    class Particle{ constructor(x,y, vx,vy, life, color){ this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.life=life; this.age=0; this.color=color; }
+      step(dt){ this.age+=dt; this.x+=this.vx*dt; this.y+=this.vy*dt; this.vy += WORLD.gravity*0.6*DPR*dt; }
+      draw(){ const a=1- this.age/this.life; if(a<=0) return; ctx.globalAlpha=a; ctx.beginPath(); ctx.arc(this.x,this.y, 3*DPR,0,Math.PI*2); ctx.fillStyle=this.color; ctx.fill(); ctx.globalAlpha=1; }
+      get alive(){ return this.age < this.life; }
+    }
+
+    function makeExplosion(x,y, count=16, color='#ffd166'){
+      for(let i=0;i<count;i++){
+        const ang=rand(0,Math.PI*2), sp=rand(100,420)*DPR;
+        state.particles.push(new Particle(x,y, Math.cos(ang)*sp, Math.sin(ang)*sp, rand(0.4,0.9), color));
+      }
+    }
+
+    function baseHit(){
+      if(state.hp>0) state.hp--; shake(12);
+      playBeep(120,0.08,'square',.05);
+      if(state.hp<=0){ gameOver(); }
+      updateHearts();
+    }
+
+    function updateHearts(){
+      elHearts.innerHTML = '';
+      const max=WORLD.enemyBaseHP;
+      for(let i=0;i<max;i++){
+        const span=document.createElement('span'); span.className='heart';
+        if(i>=state.hp) span.style.filter='grayscale(100%) opacity(0.4)';
+        elHearts.appendChild(span);
+      }
+    }
+
+    // Camera shake (tiny)
+    let shakeTime=0, shakeMag=0;
+    function shake(mag=8, time=0.2){ shakeMag=mag*DPR; shakeTime=time; }
+
+    // Spawning logic depends on level
+    function spawnEnemy(){
+      const laneY = rand(H*0.35, H - WORLD.groundH*DPR - 26*DPR);
+      const speed = rand(70, 120) * DPR * (1 + state.level*0.08);
+      const hp = 1 + Math.floor(state.level/5);
+      const r = clamp(16 + state.level, 16, 28) * DPR;
+      const e = new Enemy(laneY, speed, hp, r);
+      if(Math.random()<0.2+ state.level*0.01){ e.color='#ff6b7a'; e.speed*=1.2; }
+      state.enemies.push(e);
+    }
+
+    // Collision detection
+    function collide(){
+      for(const s of state.shells){
+        for(const e of state.enemies){
+          if(!s.alive||!e.alive) continue;
+          const dx=e.x-s.x, dy=e.y-s.y, rr=e.r + s.r;
+          if(dx*dx+dy*dy <= rr*rr){
+            s.explode(); e.hp--; makeExplosion(s.x,s.y, 12, '#ffd166');
+            playBeep(420,0.04,'triangle',.06);
+            if(e.hp<=0){ e.alive=false; onKill(); }
+          }
+        }
+      }
+    }
+
+    function onKill(){
+      // combo
+      state.comboTimer = 1.6; state.combo = Math.min(5, state.combo+1);
+      state.score += Math.floor(100 * state.combo);
+      elScore.textContent = state.score;
+      elCombo.textContent = 'x'+state.combo;
+      shake(6, .15);
+    }
+
+    function update(dt){
+      if(!running || paused) return;
+
+      // spawn
+      state.spawnTimer -= dt; if(state.spawnTimer<=0){ state.spawnTimer = Math.max(0.5, state.spawnInterval - state.level*0.05 + rand(-0.2,0.2)); spawnEnemy(); }
+
+      // level up gradually
+      if(state.score >= state.level*600){ state.level++; elLv.textContent=state.level; playBeep(660,0.08,'sine',.06); }
+
+      // combo timer decay
+      if(state.comboTimer>0){ state.comboTimer -= dt; if(state.comboTimer<=0){ state.combo=1; elCombo.textContent='x1'; }}
+
+      // charging power
+      if(state.pointer.charging){ state.pointer.power = clamp(state.pointer.power + WORLD.chargeSpeed*DPR*dt, 0, WORLD.maxPower*DPR); }
+      elPowerFill.style.width = (state.pointer.power/(WORLD.maxPower*DPR))*100 + '%';
+
+      // update entities
+      for(const s of state.shells) s.step(dt);
+      for(const e of state.enemies) e.step(dt);
+      for(const p of state.particles) p.step(dt);
+
+      collide();
+
+      // cleanup
+      state.shells = state.shells.filter(s=>s.alive);
+      state.enemies = state.enemies.filter(e=>e.alive);
+      state.particles = state.particles.filter(p=>p.alive);
+    }
+
+    function render(){
+      // shake transform
+      let sx=0, sy=0; if(shakeTime>0){ shakeTime-=1/60; sx=rand(-shakeMag,shakeMag); sy=rand(-shakeMag,shakeMag); }
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.clearRect(0,0,W,H);
+
+      // background gradient sky
+      const sky=ctx.createLinearGradient(0,0,0,H);
+      sky.addColorStop(0,'#101633'); sky.addColorStop(1,'#0a0e1f');
+      ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+
+      // stars
+      ctx.globalAlpha=0.3; for(let i=0;i<70;i++){ const x=(i*97)%W, y=(i*53)%Math.floor(H*0.6); ctx.fillRect(x,y,2,2); }
+      ctx.globalAlpha=1;
+
+      // distant hills
+      ctx.fillStyle='#0f1a3e'; ctx.beginPath(); ctx.moveTo(0,H*0.72); for(let x=0;x<=W;x+=20){ const y=H*0.72 + Math.sin(x*0.004)*18; ctx.lineTo(x,y);} ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#0b1735'; ctx.beginPath(); ctx.moveTo(0,H*0.82); for(let x=0;x<=W;x+=24){ const y=H*0.82 + Math.cos(x*0.003)*22; ctx.lineTo(x,y);} ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+
+      // ground
+      ctx.fillStyle='#0a142e'; ctx.fillRect(0, H - WORLD.groundH*DPR, W, WORLD.groundH*DPR);
+
+      ctx.save(); ctx.translate(sx, sy);
+
+      // turret base
+      const tx = WORLD.turretX*DPR, ty = WORLD.turretY;
+      // aim angle
+      const ang = Math.atan2(state.pointer.y - ty, state.pointer.x - tx);
+      // barrel
+      ctx.save(); ctx.translate(tx,ty); ctx.rotate(ang);
+      ctx.fillStyle='#a3b9ff'; ctx.fillRect(0,-8*DPR, 44*DPR, 16*DPR);
+      // muzzle glow when charging
+      if(state.pointer.charging){ const g=ctx.createRadialGradient(48*DPR,0,2,48*DPR,0,14*DPR); g.addColorStop(0,'rgba(88,242,209,.9)'); g.addColorStop(1,'rgba(88,242,209,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(48*DPR,0,14*DPR,0,Math.PI*2); ctx.fill(); }
+      ctx.restore();
+      // base body
+      ctx.fillStyle='#6f86ff'; ctx.fillRect(tx-20*DPR, ty, 40*DPR, 16*DPR);
+      ctx.beginPath(); ctx.arc(tx, ty, 16*DPR, Math.PI, 0); ctx.fillStyle='#8fa2ff'; ctx.fill();
+
+      // draw entities
+      for(const s of state.shells) s.draw();
+      for(const e of state.enemies) e.draw();
+      for(const p of state.particles) p.draw();
+
+      ctx.restore();
+    }
+
+    function loop(t){
+      if(!last) last = t; const dt = Math.min(0.033, (t - last)/1000); last = t;
+      if(running && !paused){ update(dt); }
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    function fire(){
+      const tx = WORLD.turretX*DPR, ty = WORLD.turretY;
+      const ang = Math.atan2(state.pointer.y - ty, state.pointer.x - tx);
+      const speed = clamp(state.pointer.power, 200*DPR, WORLD.maxPower*DPR);
+      const vx = Math.cos(ang) * speed;
+      const vy = Math.sin(ang) * speed;
+      state.shells.push(new Shell(tx + Math.cos(ang)*46*DPR, ty + Math.sin(ang)*46*DPR, vx, vy));
+      state.pointer.power = 0; elPowerFill.style.width='0%';
+      playBeep(280,0.06,'sawtooth',.05);
+    }
+
+    function pointerPosFromEvent(e){
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * DPR, y = (e.clientY - rect.top) * DPR;
+      state.pointer.x = x; state.pointer.y = y;
+    }
+
+    // Input handlers (mouse + touch)
+    canvas.addEventListener('mousemove', (e)=>{ pointerPosFromEvent(e); });
+    canvas.addEventListener('mousedown', (e)=>{ if(!running || paused) return; pointerPosFromEvent(e); state.pointer.charging=true; state.pointer.down=true; });
+    window.addEventListener('mouseup', ()=>{ if(state.pointer.down){ state.pointer.down=false; if(state.pointer.charging){ state.pointer.charging=false; fire(); }}});
+
+    canvas.addEventListener('touchstart', (e)=>{ if(!running || paused) return; const t=e.changedTouches[0]; pointerPosFromEvent(t); state.pointer.charging=true; state.pointer.down=true; e.preventDefault(); }, {passive:false});
+    canvas.addEventListener('touchmove', (e)=>{ const t=e.changedTouches[0]; pointerPosFromEvent(t); e.preventDefault(); }, {passive:false});
+    window.addEventListener('touchend', (e)=>{ if(state.pointer.down){ state.pointer.down=false; if(state.pointer.charging){ state.pointer.charging=false; fire(); }} });
+
+    // Keyboard
+    window.addEventListener('keydown', (e)=>{
+      if(e.key==='p' || e.key==='P'){ togglePause(); }
+      if(e.key==='r' || e.key==='R'){ restart(); }
+    });
+
+    function start(){
+      running=true; paused=false; overlay.style.display='none';
+      if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+    }
+    function togglePause(){ if(!running) return; paused=!paused; overlay.style.display = paused? 'grid' : 'none'; startBtn.textContent = '再開'; }
+    function restart(){ Object.assign(state, {
+        score:0, level:1, combo:1, comboTimer:0, hp:WORLD.enemyBaseHP, shells:[], enemies:[], particles:[], spawnTimer:0, spawnInterval:1.6,
+        pointer:{x:300,y:300,down:false,charging:false,power:0}
+      });
+      elScore.textContent=0; elLv.textContent=1; elCombo.textContent='x1'; updateHearts(); overlay.style.display='grid'; startBtn.textContent='ゲーム開始'; running=false; paused=false;
+    }
+    function gameOver(){ paused=true; running=false; overlay.style.display='grid'; startBtn.textContent='リスタート'; }
+
+    // Initialize
+    updateHearts();
+    startBtn.addEventListener('click', ()=>{ if(!running){ start(); } else { togglePause(); } });
+
+    requestAnimationFrame(loop);
+
+  })();
+  </script>
+</body>
+</html>
